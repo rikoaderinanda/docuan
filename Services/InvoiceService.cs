@@ -94,7 +94,9 @@ public class InvoiceService : IInvoiceService
         var raw = invoiceData;
         var nomorInvoice = raw["NomorInvoice"]?.ToString() ?? "";
         var namaPenagih = raw["NamaPenagih"]?.ToString() ?? "";
-        var totalHarga = raw["TotalHarga"] != null ? System.Convert.ToDecimal(raw["TotalHarga"].GetValue<object>()) : 0;
+        var totalHarga = raw["TotalHarga"] != null
+            ? System.Convert.ToDecimal(raw["TotalHarga"]!.GetValue<object>())
+            : 0;
         var tanggalStr = raw["Tanggal"]?.ToString();
 
         DateTime? tanggal = null;

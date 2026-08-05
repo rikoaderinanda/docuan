@@ -18,8 +18,11 @@ namespace Docuan.Services
 
         public async Task<string> GetAiResponse(string text, string model)
         {
-            var aiSettings = _configuration.GetSection("AiSettings").Get<Dictionary<string, AiModelSettings>>();
-            var settings = aiSettings[model];
+            var aiSettings = _configuration.GetSection("AiSettings").Get<Dictionary<string, AiModelSettings>>() ??
+                             new();
+            var settings = aiSettings.TryGetValue(model, out var s) ? s : null;
+            if (settings == null)
+                throw new InvalidOperationException($"AI model '{model}' tidak ditemukan dalam konfigurasi.");
 
             using (var client = new HttpClient())
             {
@@ -43,7 +46,7 @@ namespace Docuan.Services
                 {
                     var responseContent = await response.Content.ReadAsStringAsync();
                     var responseJson = JsonConvert.DeserializeObject<dynamic>(responseContent);
-                    return responseJson.choices[0].message.content;
+                    return responseJson?.choices?[0]?.message?.content ?? "";
                 }
                 else
                 {
@@ -55,8 +58,8 @@ namespace Docuan.Services
 
     public class AiModelSettings
     {
-        public string ApiKey { get; set; }
-        public string Model { get; set; }
-        public string BaseUrl { get; set; }
+        public string ApiKey { get; set; } = string.Empty;
+        public string Model { get; set; } = string.Empty;
+        public string BaseUrl { get; set; } = string.Empty;
     }
 }

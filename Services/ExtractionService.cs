@@ -128,9 +128,7 @@ Kembalikan HANYA dalam format JSON murni tanpa markdown dengan aturan berikut:
         {
             var nomorInv = data["NomorInvoice"]?.ToString() ?? "";
             var namaPen = data["NamaPenagih"]?.ToString() ?? "";
-            var totalHrg = data["TotalHarga"] != null
-                ? Convert.ToDecimal(data["TotalHarga"].GetValue<string>())
-                : 0;
+            var totalHrg = ParseDecimalValue(data["TotalHarga"]);
             DateTime? tgl = null;
             if (DateTime.TryParse(data["Tanggal"]?.ToString(), out var pt))
                 tgl = DateTime.SpecifyKind(pt, DateTimeKind.Utc);
@@ -148,10 +146,27 @@ Kembalikan HANYA dalam format JSON murni tanpa markdown dengan aturan berikut:
         return result;
     }
 
+    private static decimal ParseDecimalValue(JsonNode? node)
+    {
+        if (node is not JsonValue value) return 0;
+
+        if (value.TryGetValue<decimal>(out var dec)) return dec;
+        if (value.TryGetValue<double>(out var dbl)) return (decimal)dbl;
+        if (value.TryGetValue<long>(out var lng)) return lng;
+        if (value.TryGetValue<int>(out var i)) return i;
+        if (value.TryGetValue<string>(out var str) &&
+            decimal.TryParse(str,
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            return parsed;
+
+        return 0;
+    }
+
     public async Task<ExtractionFileResult> ExtractAndSaveInvoiceAsync(byte[] fileBytes, string fileName,
         string contentType)
     {
-        var ocrText = await _ocrService.ExtractTextAsync(fileBytes);
+        var ocrText = _ocrService.ExtractText(fileBytes, contentType);
         var providers = await GetProvidersToTryAsync(null);
         var aiResult = await CallAiAsync(providers.First(), ocrText);
 
@@ -168,7 +183,8 @@ Kembalikan HANYA dalam format JSON murni tanpa markdown dengan aturan berikut:
         }
 
         var extractedData = JsonSerializer.Deserialize<JsonObject>(aiResult.RawAiText);
-        if (extractedData == null || !extractedData.ContainsKey("isInvoice") || !(bool)extractedData["isInvoice"])
+        if (extractedData == null || !extractedData.ContainsKey("isInvoice") || extractedData["isInvoice"] == null ||
+            !(bool)extractedData["isInvoice"]!)
         {
             return new ExtractionFileResult
             {
@@ -184,22 +200,20 @@ Kembalikan HANYA dalam format JSON murni tanpa markdown dengan aturan berikut:
         {
             NomorInvoice = extractedData["NomorInvoice"]?.ToString(),
             NamaPenagih = extractedData["NamaPenagih"]?.ToString(),
-            TotalHarga = extractedData["TotalHarga"] != null
-                ? Convert.ToDecimal(extractedData["TotalHarga"].GetValue<string>())
-                : 0,
+            TotalHarga = ParseDecimalValue(extractedData["TotalHarga"]),
             Tanggal = DateTime.TryParse(extractedData["Tanggal"]?.ToString(), out var pt)
                 ? DateTime.SpecifyKind(pt, DateTimeKind.Utc)
                 : (DateTime?)null,
             InformasiPembayaran = new InformasiPembayaran
             {
-                MetodePembayaran = extractedData["MetodePembayaran"]?.ToString(),
-                Bank = extractedData["Bank"]?.ToString(),
-                NomorRekening = extractedData["NomorRekening"]?.ToString()
+                NamaBank = extractedData["MetodePembayaran"]?.ToString() ?? extractedData["Bank"]?.ToString(),
+                NomorRekening = extractedData["NomorRekening"]?.ToString(),
+                AtasNama = extractedData["AtasNama"]?.ToString()
             },
             Vendor = new Vendor
             {
-                NamaVendor = extractedData["NamaVendor"]?.ToString(),
-                AlamatVendor = extractedData["AlamatVendor"]?.ToString()
+                Nama = extractedData["NamaVendor"]?.ToString(),
+                Alamat = extractedData["AlamatVendor"]?.ToString()
             }
         };
 
